@@ -144,7 +144,7 @@ end_of_file:
         testl %eax, %eax           # Проверяем знак: < 0 ?
         jge dec_no_sign            # Если число неотрицательное, '-' не печатаем
         negl %eax                  # Делаем модуль числа (абсолютное значение) для последующей печати
-        movl $4, %ebx              # fd=1 (stdout) для write
+        movl $1, %ebx              # fd=1 (stdout) для write
         movl $4, %eax              # sys_write: Linux x86 int $0x80, номер 4 (write)
         movl $sign_char, %ecx      # Адрес строки "-"
         movl $sign_len, %edx       # Длина строки "-" (1)
@@ -185,7 +185,7 @@ dec_convert_loop:
         testl %eax, %eax           # Проверка знака (EAX < 0?)
         jge oct_no_sign            # Если неотрицательно, знак не печатаем
         negl %eax                  # EAX = |EAX| для печати цифр
-        movl $4, %ebx              # EBX=1? см. ниже: stdout (fd=1) для write
+        movl $1, %ebx              # EBX=1? см. ниже: stdout (fd=1) для write
         movl $4, %eax              # EAX=4: sys_write (Linux int 0x80)
         movl $sign_char, %ecx      # ECX = адрес строки "-"
         movl $sign_len, %edx       # EDX = длина строки "-" (1)
@@ -215,7 +215,7 @@ oct_convert_loop:
         testl %eax, %eax           # Проверка, отрицательно ли число
         jge bin_no_sign            # Если число неотрицательное, '-' не печатаем
         negl %eax                  # EAX = |EAX|, дальше печатаем модуль
-        movl $4, %ebx              # sys_write: номер системного вызова (int 0x80)
+        movl $1, %ebx              # sys_write: номер системного вызова (int 0x80)
         movl $4, %eax              # stdout: файловый дескриптор 1 (куда пишем)
         movl $sign_char, %ecx      # ECX = адрес строки "-"
         movl $sign_len, %edx       # EDX = длина строки "-" (1)
