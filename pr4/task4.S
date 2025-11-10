@@ -160,6 +160,14 @@ dec_no_sign:
 
         # Цикл: делим число на 10, остаток превращаем в символ, пишем влево, повторяем пока частное != 0
 
+        # Если число равно 0, выводим хотя бы одну цифру '0'
+        cmpl $0, %eax
+        jne dec_convert_loop
+        # если EAX==0, пишем '0'
+        decl %edi
+        movb $'0', (%edi)
+        jmp dec_end_loop
+
 dec_convert_loop:
         # если EAX != 0, делим на 10 и получаем очередную цифру
         xorl %edx, %edx            # обнуляем EDX для правильного деления 64‑битного EDX:EAX
@@ -170,6 +178,7 @@ dec_convert_loop:
         testl %eax, %eax           # проверяем, стало ли частное нулём?
         jne dec_convert_loop       # если нет, продолжаем извлекать цифры
 
+dec_end_loop:
         # Посчитать длину готовой строки: (адрес после '\n') - (адрес первой цифры)
         # sum_str+6 указывает на первый байт ПОСЛЕ '\n'.
         # (sum_str+6) - EDI = количество байтов, которые нужно вывести (цифры + '\n').
@@ -188,14 +197,24 @@ dec_convert_loop:
         testl %eax, %eax           # Проверка знака (EAX < 0?)
         jge oct_no_sign            # Если неотрицательно, знак не печатаем
         negl %eax                  # EAX = |EAX| для печати цифр
+        # Сохраняем абсолютное значение на стеке перед выводом знака, т.к. системный вызов
+        # перезаписывает %eax количеством записанных байтов
+        pushl %eax                 # поместить абсолютное значение на стек
         movl $1, %ebx              # EBX=1? см. ниже: stdout (fd=1) для write
         movl $4, %eax              # EAX=4: sys_write (Linux int 0x80)
         movl $sign_char, %ecx      # ECX = адрес строки "-"
         movl $sign_len, %edx       # EDX = длина строки "-" (1)
         int $0x80                  # write(1, "-", 1)
+        popl %eax                  # восстановить абсолютное значение
 oct_no_sign:
         leal oct_str+6, %edi       # EDI указывает на позицию '\n' в oct_str
         movl $8, %ebx              # EBX(делитель) = 8 (основание системы = 8)
+
+        cmpl $0, %eax
+        jne oct_convert_loop
+        decl %edi
+        movb $'0', (%edi)
+        jmp oct_end_loop
 oct_convert_loop:
         xorl %edx, %edx            # EDX = 0 перед divl (делим пару EDX:EAX)
         divl %ebx                  # (EDX:EAX)/8 → EAX=частное, EDX=остаток (0..7)
@@ -204,7 +223,8 @@ oct_convert_loop:
         movb %dl, (%edi)           # Записать символ в буфер
         testl %eax, %eax           # Частное стало 0?
         jne oct_convert_loop       # Нет → продолжаем цикл
-        
+
+oct_end_loop:        
         leal oct_str+7, %ecx       # ECX = адрес байта после '\n' (конец подстроки)
         subl %edi, %ecx            # ECX = длина к выводу = (конец − начало)
         movl %ecx, %edx            # EDX = длина для write
@@ -218,14 +238,24 @@ oct_convert_loop:
         testl %eax, %eax           # Проверка, отрицательно ли число
         jge bin_no_sign            # Если число неотрицательное, '-' не печатаем
         negl %eax                  # EAX = |EAX|, дальше печатаем модуль
+        # Сохраняем абсолютное значение на стеке перед выводом знака,
+        # поскольку системный вызов перезаписывает %eax количеством записанных байтов.
+        pushl %eax                 # сохранить абсолютное значение
         movl $1, %ebx              # sys_write: номер системного вызова (int 0x80)
         movl $4, %eax              # stdout: файловый дескриптор 1 (куда пишем)
         movl $sign_char, %ecx      # ECX = адрес строки "-"
         movl $sign_len, %edx       # EDX = длина строки "-" (1)
         int $0x80                  # вызвать write(1, "-", 1)
+        popl %eax                  # восстановить абсолютное значение
 bin_no_sign:
         leal bin_str+16, %edi      # EDI указывает на '\n' в конце буфера; цифры пишем слева от него
         movl $2, %ebx              # EBX = 2, делитель = 2
+
+        cmpl $0, %eax
+        jne bin_convert_loop
+        decl %edi
+        movb $'0', (%edi)
+        jmp bin_end_loop
 bin_convert_loop:
         xorl %edx, %edx            # EDX = 0 перед divl (делим пару EDX:EAX)
         divl %ebx                  # (EDX:EAX)/2 → EAX=частное, EDX=остаток (0..1)
@@ -235,6 +265,7 @@ bin_convert_loop:
         testl %eax, %eax           # частное стало 0?
         jne bin_convert_loop       # нет — продолжаем
         
+bin_end_loop:
         leal bin_str+17, %ecx      # ECX = адрес байта сразу после '\n' (конец подстроки)
         subl %edi, %ecx            # ECX = длина к выводу = (конец − начало)
         movl %ecx, %edx            # EDX = длина для write
