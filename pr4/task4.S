@@ -160,13 +160,12 @@ dec_no_sign:
 
         # Цикл: делим число на 10, остаток превращаем в символ, пишем влево, повторяем пока частное != 0
 
-        # Если число равно 0, выводим хотя бы одну цифру '0'
-        cmpl $0, %eax
-        jne dec_convert_loop
-        # если EAX==0, пишем '0'
-        decl %edi
-        movb $'0', (%edi)
-        jmp dec_end_loop
+        # десятичный вывод: обработка нуля
+        cmpl $0, %eax              # сравниваем EAX с 0
+        jne dec_convert_loop       # если не равно 0 — переходим к циклу деления/преобразования
+        decl %edi                  # сдвигаем указатель влево, готовим место под единственную цифру
+        movb $'0', (%edi)          # записываем символ '0' в буфер
+        jmp dec_end_loop           # завершаем и переходим к блоку печати
 
 dec_convert_loop:
         # если EAX != 0, делим на 10 и получаем очередную цифру
@@ -210,11 +209,12 @@ oct_no_sign:
         leal oct_str+6, %edi       # EDI указывает на позицию '\n' в oct_str
         movl $8, %ebx              # EBX(делитель) = 8 (основание системы = 8)
 
-        cmpl $0, %eax
-        jne oct_convert_loop
-        decl %edi
-        movb $'0', (%edi)
-        jmp oct_end_loop
+        # восьмеричный вывод: обработка нуля
+        cmpl $0, %eax              # сравниваем EAX с 0
+        jne oct_convert_loop       # если не 0 — выполняем цикл преобразования
+        decl %edi                  # сдвигаем указатель, освобождаем место
+        movb $'0', (%edi)          # помещаем символ '0' в буфер
+        jmp oct_end_loop           # переходим к завершению вывода
 oct_convert_loop:
         xorl %edx, %edx            # EDX = 0 перед divl (делим пару EDX:EAX)
         divl %ebx                  # (EDX:EAX)/8 → EAX=частное, EDX=остаток (0..7)
@@ -251,11 +251,12 @@ bin_no_sign:
         leal bin_str+16, %edi      # EDI указывает на '\n' в конце буфера; цифры пишем слева от него
         movl $2, %ebx              # EBX = 2, делитель = 2
 
-        cmpl $0, %eax
-        jne bin_convert_loop
-        decl %edi
-        movb $'0', (%edi)
-        jmp bin_end_loop
+        # двоичный вывод: обработка нуля
+        cmpl $0, %eax              # сравниваем EAX с 0
+        jne bin_convert_loop       # если не 0 — выполняем цикл преобразования
+        decl %edi                  # сдвигаем указатель, готовим место
+        movb $'0', (%edi)          # помещаем символ '0' в буфер
+        jmp bin_end_loop           # переходим к завершению вывода
 bin_convert_loop:
         xorl %edx, %edx            # EDX = 0 перед divl (делим пару EDX:EAX)
         divl %ebx                  # (EDX:EAX)/2 → EAX=частное, EDX=остаток (0..1)
