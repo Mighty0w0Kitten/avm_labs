@@ -1,126 +1,219 @@
-.data                           # Инициализированные данные
+/*
+    Программа для задания 5: Вычисление вектора b(i) = A(k,i) + A(i,l).
+    Использует базово-индексную адресацию со смещением, как в примере adr-mode.S.
+*/
 
-                            # Матрица A 6x6
-A:
-    .long 1, 2, 3, 4, 5, 6
-    .long 7, 8, 9, 10, 11, 12
-    .long 13, 14, 15, 16, 17, 18
-    .long 19, 20, 21, 22, 23, 24
-    .long 25, 26, 27, 28, 29, 30
-    .long 31, 32, 33, 34, 35, 36
+.include "my-macro"  # Макрос Finish для выхода
 
-.bss                            # Неинициализированные данные
+.data  # Инициализированные данные
+    A:  # Матрица 6x6, .long, заполнена 1..36 для теста
+        .long 1, 2, 3, 4, 5, 6
+        .long 7, 8, 9, 10, 11, 12
+        .long 13, 14, 15, 16, 17, 18
+        .long 19, 20, 21, 22, 23, 24
+        .long 25, 26, 27, 28, 29, 30
+        .long 31, 32, 33, 34, 35, 36
 
-                            # Вектор b (24 байта)
-b:
-    .space 24
+    error_msg:
+        .ascii "Invalid index\n"  # 14 байт для ошибки
 
-                            # Переменные k и l (по 4 байта)
-k:
-    .space 4
-l:
-    .space 4
+    header_msg:
+        .ascii "b: "  # 3 байта для заголовка вывода
 
-                            # Буферы для ввода строк (по 10 байт каждый, хватит для "1\n" до "6\n")
-input_buf_k:
-    .space 10
-input_buf_l:
-    .space 10
+    space_msg:
+        .ascii " "  # 1 байт для пробела
 
-.include "my-macro"             # Подключаем макрос Finish для выхода
+    newline_msg:
+        .ascii "\n"  # 1 байт для новой строки
 
-.text                           # Секция кода: здесь размещаются инструкции, которые выполнит процессор
-.global _start                  # Определяем точку входа в программу (глобальная метка для линкера)
+.bss  # Неинициализированные данные
+    b:
+        .space 24  # Вектор b (6*4 байта)
 
-_start:
-    nop                         # Пустая инструкция: используется для отладки, чтобы установить точку останова в kdbg
+    k:
+        .space 4  # Переменная k (4 байта)
 
-                            # Чтение k: 1) Читаем строку в буфер. 2) Преобразуем в число. 3) Сохраняем в k.
+    l:
+        .space 4  # Переменная l (4 байта)
 
-                            # 1) Подготовка и вызов sys_read для k.
-    movl $3, %eax               # eax=3: код для чтения (sys_read)
-    movl $0, %ebx               # ebx=0: читать из терминала (stdin)
-    movl $input_buf_k, %ecx     # ecx = адрес буфера input_buf_k: куда сохранится введённая строка
-    movl $10, %edx              # edx=10: сколько байт максимум читать (защита от переполнения)
-    int $0x80                   # Прерывание: ядро Linux выполняет sys_read, возвращает кол-во прочитанных байтов в eax (например, "5\n")
+    input_buf_k:
+        .space 10  # Буфер для ввода k (строка)
 
-                            # 2) Преобразование строки в число: цикл по байтам буфера.
-    movl $0, %eax               # eax=0: старт числа
-    movl $input_buf_k, %esi     # esi = адрес начала буфера: указатель для чтения байтов по порядку
-atoi_k_loop:                # Цикл обработки символов строки.
-    movb (%esi), %bl            # bl=текущий байт (символ из строки)
-    cmpb $'\n', %bl             # Если '\n' — конец, прыгаем на done
-    je atoi_k_done              
-    cmpb $0, %bl                # Если 0 — конец, прыгаем на done
-    je atoi_k_done              
-    subb $'0', %bl              # bl = bl - '0': преобразуем ASCII-символ цифры в числовое значение (0-9)
-    imull $10, %eax             # eax = eax * 10: сдвигаем текущее число для добавления новой цифры
-    addl %ebx, %eax             # eax = eax + bl: добавляем новую цифру
-    incl %esi                   # esi++: перемещаем указатель на следующий байт в буфере
-    jmp atoi_k_loop             # Повторяем цикл для следующего символа
-atoi_k_done:                
-                            # 3) Сохранение числа.
-    movl %eax, k                # Сохраняем результат в переменную k в памяти
+    input_buf_l:
+        .space 10  # Буфер для ввода l (строка)
 
-                            # Повторяем процесс для l: те же шаги 1-3, но с буфером input_buf_l и переменной l.
-                            # 1) Подготовка и вызов sys_read для l.
-    movl $3, %eax               # eax = 3: sys_read
-    movl $0, %ebx               # ebx = 0: stdin
-    movl $input_buf_l, %ecx     # ecx = адрес буфера для l
-    movl $10, %edx              # edx = 10: длина
-    int $0x80                   # Чтение строки для l
+    output_buf:
+        .space 20  # Буфер для строки числа при выводе
 
-                            # 2) Преобразование строки в число.
-    movl $0, %eax               
-    movl $input_buf_l, %esi     
-atoi_l_loop:                
-    movb (%esi), %bl            # bl = байт из буфера
-    cmpb $'\n', %bl             # Проверка на '\n'
-    je atoi_l_done
-    cmpb $0, %bl                # Проверка на 0
-    je atoi_l_done
-    subb $'0', %bl              # Преобразование в цифру
-    imull $10, %eax             # *10
-    addl %ebx, %eax             # + цифра
-    incl %esi                   # Следующий байт
-    jmp atoi_l_loop             # Повтор
-atoi_l_done:                
-                            # 3) Сохранение числа.
-    movl %eax, l                # Сохраняем в l
+.text  # Секция кода
+    .global _start  # Точка входа
 
-                            # Корректировка индексов для 0-based (вычитаем 1 из k и l).
-    decl k                      # k = k - 1: теперь индекс от 0 до 5
-    decl l                      # l = l - 1: аналогично
+    _start:
+        nop  # Для отладки в kdbg
 
-                            # Проверка диапазона k — загружаем и сравниваем.
-    movl k, %eax                # eax = k: для временного хранения и сравнения
-    cmpl $0, %eax               # Сравниваем с 0
-    jl error                    # Если < 0 (jl — jump if less), прыгаем на ошибку
-    cmpl $5, %eax               # Сравниваем с 5
-    jg error                    # Если > 5 (jg — jump if greater), прыгаем на ошибку
-                            # Проверка диапазона l — аналогично.
-    movl l, %eax                # eax = l
-    cmpl $0, %eax
-    jl error
-    cmpl $5, %eax
-    jg error
-                            # Если все проверки прошли — продолжаем программу.
-    jmp continue                # Прыжок на метку continue (основная логика)
+        # Чтение k с stdin
+        movl $3, %eax
+        movl $0, %ebx
+        movl $input_buf_k, %ecx
+        movl $10, %edx
+        int $0x80
 
-error:
-                            # Обработка ошибки: вывод сообщения и выход.
-                            # Подготовка sys_write для печати ошибки.
-    movl $4, %eax               # eax = 4: код sys_write (запись в файл/вывод)
-    movl $1, %ebx               # ebx = 1: дескриптор stdout (стандартный вывод — экран)
-    movl $error_msg, %ecx       # ecx = адрес строки error_msg в .data
-    movl $14, %edx              # edx = 14: длина сообщения в байтах
-                            # Выполнение вывода.
-    int $0x80                   # Ядро печатает сообщение на экран
-                            # Завершение программы после ошибки.
-    Finish                      # Вызов макроса: sys_exit с кодом 0
+        movl $input_buf_k, %esi  # Параметр для atoi_sub
+        call atoi_sub
+        movl %eax, k  # Сохранение в k
 
-continue:
-                            # Здесь разместим цикл вычислений b(i) и вывод (добавим в следующем шаге).
-                            # Пока — временный выход для теста ввода.
-    Finish                      # sys_exit: программа завершается успешно
-.end                        # Конец исходного текста программы
+        # Чтение l с stdin
+        movl $3, %eax
+        movl $0, %ebx
+        movl $input_buf_l, %ecx
+        movl $10, %edx
+        int $0x80
+
+        movl $input_buf_l, %esi
+        call atoi_sub
+        movl %eax, l
+
+        # Корректировка индексов (1-based → 0-based)
+        decl k
+        decl l
+
+        # Проверка диапазона [0..5]
+        movl k, %eax
+        cmpl $0, %eax
+        jl error
+        cmpl $5, %eax
+        jg error
+        movl l, %eax
+        cmpl $0, %eax
+        jl error
+        cmpl $5, %eax
+        jg error
+        jmp continue
+
+    error:  # Обработка ошибки: вывод и выход
+        movl $4, %eax
+        movl $1, %ebx
+        movl $error_msg, %ecx
+        movl $14, %edx
+        int $0x80
+        Finish
+
+    continue:  # Основная логика: вычисления и вывод
+        movl $0, %ebx  # i=0 для цикла
+
+        compute_loop:  # Цикл вычислений b(i)
+            # A[k, i]: база = A + k*24, index=i, scale=4
+            movl k, %eax
+            imull $24, %eax
+            leal A(%eax), %edx
+            movl (%edx, %ebx, 4), %eax
+
+            # A[i, l]: база = A + i*24, index=l, scale=4
+            movl %ebx, %ecx
+            imull $24, %ecx
+            leal A(%ecx), %edx
+            movl l, %ecx
+            addl (%edx, %ecx, 4), %eax
+
+            # Сохранение в b[i]
+            movl %eax, b(,%ebx,4)
+
+            incl %ebx  # i++
+            cmpl $6, %ebx
+            jne compute_loop
+
+        # Вывод заголовка "b: "
+        movl $4, %eax
+        movl $1, %ebx
+        movl $header_msg, %ecx
+        movl $3, %edx
+        int $0x80
+
+        movl $0, %ebx  # i=0 для вывода
+
+        output_loop:  # Цикл вывода b[i]
+            movl b(,%ebx,4), %eax  # Число для itoa
+            leal output_buf, %edi  # Буфер для itoa
+            call itoa_sub  # Преобразование, edx=длина
+
+            # Вывод числа
+            movl $4, %eax
+            movl $1, %ebx
+            movl $output_buf, %ecx
+            int $0x80
+
+            # Вывод пробела
+            movl $4, %eax
+            movl $1, %ebx
+            movl $space_msg, %ecx
+            movl $1, %edx
+            int $0x80
+
+            incl %ebx  # i++
+            cmpl $6, %ebx
+            jne output_loop
+
+        # Вывод новой строки
+        movl $4, %eax
+        movl $1, %ebx
+        movl $newline_msg, %ecx
+        movl $1, %edx
+        int $0x80
+
+        Finish
+
+    # Подпрограмма atoi_sub: esi=буфер строки, возвращает eax=число
+    atoi_sub:
+        movl $0, %eax  # Стартовое число
+
+        atoi_loop:
+            movb (%esi), %bl
+            cmpb $'\n', %bl
+            je atoi_end
+            cmpb $0, %bl
+            je atoi_end
+            subb $'0', %bl
+            imull $10, %eax
+            addl %ebx, %eax
+            incl %esi
+            jmp atoi_loop
+
+        atoi_end:
+            ret
+
+    # Подпрограмма itoa_sub: eax=число, edi=буфер, возвращает edx=длина строки
+    itoa_sub:
+        movl $0, %ecx  # Счётчик цифр
+        movl $10, %esi  # Делитель
+
+        itoa_loop:
+            cmpl $0, %eax
+            je itoa_reverse
+            xorl %edx, %edx
+            divl %esi
+            addb $'0', %dl
+            movb %dl, (%edi, %ecx)
+            incl %ecx
+            jmp itoa_loop
+
+        itoa_reverse:  # Переворот строки
+            decl %ecx
+            movl $0, %edx  # Начало буфера
+
+            reverse_loop:
+                cmpl %edx, %ecx
+                jle itoa_end
+                movb (%edi, %edx), %al
+                movb (%edi, %ecx), %ah
+                movb %ah, (%edi, %edx)
+                movb %al, (%edi, %ecx)
+                incl %edx
+                decl %ecx
+                jmp reverse_loop
+
+        itoa_end:
+            addl $1, %ecx  # Длина
+            movl %ecx, %edx
+            ret
+
+.end  # Конец программы
