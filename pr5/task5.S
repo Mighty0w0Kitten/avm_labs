@@ -32,6 +32,10 @@ input_buf_k:
 input_buf_l:
     .space 10
 
+                                # Буфер для вывода (4 байта: '0' + цифра + \n + запас)
+output_buf:
+    .space 4
+
 .text                           # Секция кода: здесь размещаются инструкции, которые выполнит процессор
 .global _start                  # Определяем точку входа в программу (глобальная метка для линкера)
 
@@ -123,7 +127,59 @@ error:
     Finish                      # Вызов макроса: sys_exit с кодом 0
 
 continue:
-                            # Здесь разместим цикл вычислений b(i) и вывод (добавим в следующем шаге).
-                            # Пока — временный выход для теста ввода.
-    Finish                      # sys_exit: программа завершается успешно
+                            # Подготовка цикла: загружаем k и l в регистры, i=0.
+    movl k, %edi                # edi = k: фиксированная строка для A[k,i]
+    movl l, %esi                # esi = l: фиксированный столбец для A[i,l]
+    movl $0, %ebx               # ebx = 0: i = 0 (индекс цикла)
+
+compute_loop:
+                            # A[k,i]: вычислить базу строки k.
+    movl %edi, %edx             # edx = k
+    imull $24, %edx             # edx = k * 24 (смещение строки)
+    addl $A, %edx               # edx = A + (k * 24) — начало строки k
+    movl (%edx, %ebx,4), %eax   # eax = A[k][i] (base=edx, index=ebx=i, scale=4)
+
+                            # A[i,l]: вычислить базу строки i.
+    movl %ebx, %edx             # edx = i
+    imull $24, %edx             # edx = i * 24
+    addl $A, %edx               # edx = A + (i * 24) — начало строки i
+    addl (%edx, %esi,4), %eax   # eax += A[i][l] (base=edx, index=esi=l, scale=4)
+
+                            # Сохранение в b[i].
+    movl %eax, b(,%ebx,4)       # b[i] = eax (base=b, index=ebx, scale=4)
+
+    incl %ebx                   # i++ (ebx +=1)
+    cmpl $6, %ebx               # i == 6? (конец цикла)
+    jne compute_loop            # Нет — повторяем
+
+    # Вывод b: цикл i=0..5, простой itoa (2 цифры + \n), sys_write.
+    movl $0, %ebp               # ebp=0: i для вывода
+
+output_loop:
+    movl b(,%ebp,4), %eax       # eax = b[i]
+
+    # itoa: div 10 (единицы), div 10 (десятки), пишется в буфер.
+    movl $output_buf, %edi      # edi=начало буфера
+    movl $10, %ecx              # ecx=10
+    xorl %edx, %edx             # edx=0
+    divl %ecx                   # eax=десятки, edx=единицы
+    addb $'0', %dl              # dl='0' + единицы
+    movb %dl, 1(%edi)           # Единицы в буфер[1]
+    addb $'0', %al              # al='0' + десятки (ведущий '0' если <10)
+    movb %al, (%edi)            # Десятки в буфер[0]
+    movb $'\n', 2(%edi)         # \n в буфер[2]
+    movb $0, 3(%edi)            # Запас (null)
+
+    # sys_write: 4 байта на stdout.
+    movl $4, %eax               # sys_write
+    movl $1, %ebx               # stdout
+    movl $output_buf, %ecx      # буфер
+    movl $4, %edx               # длина 4 байта
+    int $0x80                   # Печать
+
+    incl %ebp                   # i++
+    cmpl $6, %ebp               # i==6?
+    jne output_loop             # Нет — повтор
+
+    Finish                      # Конец
 .end                        # Конец исходного текста программы
